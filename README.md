@@ -57,7 +57,9 @@ Invoke-RestMethod http://127.0.0.1:8888/health
 
 1. 安装 Tampermonkey https://www.tampermonkey.net。
 2. （1）访问https://greasyfork.org/zh-CN/scripts/579760-glm-coding-helper获取
+或者
    （2）打开仓库根目录的 `glm-coding-helper.user.js`。
+选择一种方式
 3. 复制全部内容，新建 Tampermonkey 脚本并保存。
 4. 打开 GLM Coding Plan 页面。
 

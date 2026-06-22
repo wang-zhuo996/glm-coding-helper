@@ -94,8 +94,8 @@ if ($Recreate) { $argsList += "--recreate" }
 if ($SkipInstall) { $argsList += "--skip-install" }
 if ($NoSmokeTest) { $argsList += "--no-smoke-test" }
 foreach ($arg in $PipArg) {
-    $argsList += "--pip-arg"
-    $argsList += $arg
+    # 用 --pip-arg=VALUE 等号形式，避免 argparse 把 -i / --index-url 等 dash 开头的值误判为新选项
+    $argsList += "--pip-arg=$arg"
 }
 
 & $pythonExe @argsList

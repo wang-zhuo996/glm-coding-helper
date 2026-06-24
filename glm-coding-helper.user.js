@@ -266,7 +266,7 @@
         const root = document.body || document.documentElement;
         observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
         setTimeout(tick, 500);
-        setInterval(tick, 1200);
+        setInterval(tick, 200);  // 验证码检测频率：200ms（之前 1200ms 太慢，验证码出来后要等最坏 1.2s 才开始处理）
     }
     // ── 去重保护：防止篡猴里装了改名导致的两个实例同时运行 ──────────────────
     function ensureStatusBarNode() {

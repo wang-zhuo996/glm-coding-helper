@@ -471,6 +471,66 @@
         } catch {}
         return headers;
     }
+    const _oCS = window.cookieStore;
+    function relogin() {
+        const loginArgument = {
+            "phoneNumber": "",
+            "countryCode": "",
+            "username": CFG.RELOGIN_ACCOUNT,
+            "smsCode": "",
+            "password": CFG.RELOGIN_PASSWORD,
+            "loginType": "password",
+            "grantType": "customer",
+            "userType": "PERSONAL",
+            "userCode": "",
+            "appId": "",
+            "anonymousId": ""
+        };
+        let token = {};
+        _oCS.get('bigmodel_token_production').then(async (cookie) => {
+            token = cookie;
+            const logoutRes = await _oF('/api/auth/logout', {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json;charset=UTF-8',
+                    'accept': 'application/json, text/plain, */*',
+                    'accept-language': 'zh',
+                    'set-language': 'zh',
+                    'authorization': token.value
+                },
+            });
+            console.log(`注销原token:${token.value},返回状态:${logoutRes.status}`);
+            if (logoutRes.status === 200) {
+                const loginRes = await _oF('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json;charset=UTF-8',
+                        'accept': 'application/json, text/plain, */*',
+                        'accept-language': 'zh',
+                        'set-language': 'zh'
+                    },
+                    body: JSON.stringify(loginArgument)
+                })
+                const res = await loginRes.json();
+                if (loginRes.status === 200 && res?.code === 200) {
+                    console.log(`已获取新token:${res?.data?.access_token}`);
+                    const cookie = {
+                        name: 'bigmodel_token_production',
+                        value: res?.data?.access_token,
+                        domain: token?.domain,
+                        path: token?.path,
+                        expirationDate: Date.now() + res?.data?.expires_in * 60 * 1000,
+                        secure: token?.secure,
+                        partitioned: token?.partitioned,
+                        // httpOnly:token?.httpOnly,
+                        sameSite: token?.sameSite
+                    }
+                    await _oCS.set(cookie)
+                    console.log(`已设置新token:${cookie.value}`);
+                }
+            }
+        })
+    }
     window.fetch = async function (...a) {
         const url = (typeof a[0] === 'string' ? a[0] : a[0]?.url) || '';
         // 拦截 preview：只发一次，不重试（验证码只能用一次）
@@ -519,7 +579,14 @@
                     PS.result = 'sold_out';
                     PS.inProgress = false;
                     return new Response(txt, { status: r.status, headers: { 'Content-Type': 'application/json' } });
-                } else {
+                }
+                else if (r.status === 405) {
+                    console.log('[GLM v8.9] preview 405，原样透传，脚本记录risk_control');
+                    PS.result = 'risk_control';
+                    PS.inProgress = false;
+                    return new Response(txt, { status: r.status, headers: { 'Content-Type': 'application/json' } });
+                }
+                else {
                     console.log('[GLM v8.9] preview 非预期错误 code:', d?.code, 'msg:', d?.msg, '→ 标记busy');
                     PS.result = 'busy';
                     PS.rawCode = d?.code;
@@ -629,6 +696,9 @@
         RUSH_TARGET_SEC     : 0,
         RUSH_HOLD_WINDOW_MS : 10000,
         RUSH_RELEASE_ADVANCE_MS: 0,
+        AUTO_RELOGIN: false,
+        RELOGIN_ACCOUNT: '',
+        RELOGIN_PASSWORD: '',
         HOTKEY_PAUSE: 'F8',
         HOTKEY_PAUSE_ALL: 'Shift+F8',
         HOTKEY_AUTO_CLICK_SUB: 'F9',
@@ -1046,6 +1116,12 @@
         if (everSucceeded && PS.bizId) return 'keep';
         // 接口还没返回
         if (PS.inProgress) return 'keep';
+        // ── 情况 E：接口返回 405 风控 → 关弹窗并重新登录 → 试下一个
+        if (PS.result === 'risk_control') {
+            relogin()
+            return 'close';
+        }
+
         // ── 情况 A：接口 555 系统繁忙 → 关弹窗试下一个
         if (PS.result === 'busy') return 'close';
         // ── 情况 B：接口返回 200+soldOut → 关弹窗试下一个（但前端可能因 JSON.parse 劫持而正常显示了价格）
@@ -1252,6 +1328,23 @@
                     <input type="number" id="glm-rs" value="${CFG.RUSH_TARGET_SEC}" min="0" max="59" style="width:52px;padding:3px 6px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px;text-align:center">
                 </div>
                 <div style="border-top:1px dashed #eee;padding-top:12px;margin-top:4px"></div>
+                <label style="display:flex;align-items:center;cursor:pointer">
+                    <input type="checkbox" id="glm-ar" ${CFG.AUTO_RELOGIN ? 'checked' : ''} style="margin-right:8px">
+                    <span style="font-size:14px;color:#555">风控自动重登</span>
+                    <span title="触发 405 风控时自动用下方账号密码重新登录，刷新凭证后继续抢购，无需人工介入。" style="margin-left:6px;cursor:help;color:#999;font-size:14px;border:1px solid #ccc;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;line-height:1">?</span>
+                </label>
+                <div style="padding-left:26px;display:flex;flex-direction:column;gap:8px">
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <span style="font-size:13px;color:#888;width:42px">账号</span>
+                        <input type="text" id="glm-ra" value="${(CFG.RELOGIN_ACCOUNT || '').replace(/"/g, '&quot;')}" placeholder="手机号/邮箱" autocomplete="off" style="flex:1;min-width:160px;max-width:240px;padding:4px 8px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px">
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                        <span style="font-size:13px;color:#888;width:42px">密码</span>
+                        <input type="password" id="glm-rp" value="${(CFG.RELOGIN_PASSWORD || '').replace(/"/g, '&quot;')}" placeholder="登录密码" autocomplete="off" style="flex:1;min-width:160px;max-width:240px;padding:4px 8px;border:1px solid #d9d9d9;border-radius:4px;font-size:13px">
+                    </div>
+                    <div style="font-size:12px;color:#999">账号密码仅保存在本地 Tampermonkey 存储中，用于 405 风控时自动重登。</div>
+                </div>
+                <div style="border-top:1px dashed #eee;padding-top:12px;margin-top:4px"></div>
                 <div style="padding-left:26px;display:flex;flex-direction:column;gap:8px">
                     <div style="display:flex;align-items:center;gap:8px">
                         <span style="font-size:13px;color:#666">快捷键</span>
@@ -1318,6 +1411,9 @@
                 RUSH_TARGET_MIN: parseInt(panel.querySelector('#glm-rm').value, 10),
                 RUSH_TARGET_SEC: parseInt(panel.querySelector('#glm-rs').value, 10),
                 RUSH_RELEASE_ADVANCE_MS: CFG.RUSH_RELEASE_ADVANCE_MS,
+                AUTO_RELOGIN: panel.querySelector('#glm-ar').checked,
+                RELOGIN_ACCOUNT: panel.querySelector('#glm-ra').value.trim(),
+                RELOGIN_PASSWORD: panel.querySelector('#glm-rp').value,
                 HOTKEY_PAUSE: normalizeHotkeyString(panel.querySelector('#glm-hk-pause').value, 'F8'),
                 HOTKEY_PAUSE_ALL: normalizeHotkeyString(panel.querySelector('#glm-hk-pauseall').value, 'Shift+F8'),
                 HOTKEY_AUTO_CLICK_SUB: normalizeHotkeyString(panel.querySelector('#glm-hk-sub').value, 'F9'),

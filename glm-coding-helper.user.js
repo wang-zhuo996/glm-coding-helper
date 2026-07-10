@@ -522,7 +522,14 @@
                     PS.result = 'sold_out';
                     PS.inProgress = false;
                     return new Response(txt, { status: r.status, headers: { 'Content-Type': 'application/json' } });
-                } else {
+                }
+                else if (r.status === 405) {
+                    console.log('[GLM v8.9] preview 405，原样透传，脚本记录risk_control');
+                    PS.result = 'risk_control';
+                    PS.inProgress = false;
+                    return new Response(txt, { status: r.status, headers: { 'Content-Type': 'application/json' } });
+                }
+                 else {
                     console.log('[GLM v8.9] preview 非预期错误 code:', d?.code, 'msg:', d?.msg, '→ 标记busy');
                     PS.result = 'busy';
                     PS.rawCode = d?.code;
@@ -1049,6 +1056,11 @@
         if (everSucceeded && PS.bizId) return 'keep';
         // 接口还没返回
         if (PS.inProgress) return 'keep';
+        // ── 情况 E：接口返回 405 风控 → 关弹窗 → 暂停运行
+        if (PS.result === 'risk_control') {
+            toggleRuntimePause();
+            return 'close';
+        }
         // ── 情况 A：接口 555 系统繁忙 → 关弹窗试下一个
         if (PS.result === 'busy') return 'close';
         // ── 情况 B：接口返回 200+soldOut → 关弹窗试下一个（但前端可能因 JSON.parse 劫持而正常显示了价格）
@@ -1336,7 +1348,12 @@
     function tick() {
         if (state === 'DONE') return;
         if (runtimePaused) {
-            setBar(`⏸️ 脚本已暂停。${pauseHotkey()} 恢复。`, '#722ed1');
+            if (PS?.result === 'risk_control'){
+                setBar(`⏸️ 脚本已因风控暂停。${pauseHotkey()} 恢复。`, '#722ed1');
+            }
+            else{
+                setBar(`⏸️ 脚本已暂停。${pauseHotkey()} 恢复。`, '#722ed1');
+            }
             return;
         }
         if (window.__glmRushConfirmed && window.__glmRushDialogSeen && !getPayDialog()) {

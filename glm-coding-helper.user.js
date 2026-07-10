@@ -1121,7 +1121,9 @@
         if (PS.inProgress) return 'keep';
         // ── 情况 E：接口返回 405 风控 → 关弹窗并重新登录 → 试下一个
         if (PS.result === 'risk_control') {
-            relogin()
+            if (PS.AUTO_RELOGIN && PS.RELOGIN_ACCOUNT && PS.RELOGIN_PASSWORD){
+                relogin();
+            }
             return 'close';
         }
 

@@ -1043,7 +1043,7 @@
         if (!dlg) { noPriceSince = 0; return 'keep'; }
         if (window.__glmRushConfirmed) {
             window.__glmRushDialogSeen = 1;
-            return 'keep';
+            // return 'keep';
         }
         // 只有当前拿到有效 bizId，才锁住支付弹窗，避免历史成功状态误判
         if (everSucceeded && PS.bizId) return 'keep';
